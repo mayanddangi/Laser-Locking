@@ -1,0 +1,14 @@
+main.c:88:5:int main()	24	static
+main.c:160:6:void SystemClock_Config()	88	static
+main.c:200:13:void MX_ADC1_Init()	24	static
+main.c:258:13:void MX_DAC_Init()	16	static
+main.c:296:13:void MX_TIM9_Init()	24	static
+main.c:332:13:void MX_DMA_Init()	16	static
+main.c:350:13:void MX_GPIO_Init()	40	static
+main.c:372:6:void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef*)	16	static
+main.c:386:7:float RampOut(long int)	32	static
+main.c:398:10:uint16_t RampOut1(long int)	24	static
+main.c:408:6:long int getCurrentMicros()	24	static
+main.c:421:24:uint32_t LL_SYSTICK_IsActiveCounterFlag()	4	static
+main.c:431:6:void Error_Handler()	4	static,ignoring_inline_asm
+maincpp.cpp:10:6:void mainCpp()	4	static

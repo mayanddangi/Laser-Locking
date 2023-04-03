@@ -1,0 +1,10 @@
+15:38:01 **** Incremental Build of configuration Debug for project laser_locking stm ****
+make -j12 all 
+arm-none-eabi-size   laser_locking\ stm.elf 
+   text	   data	    bss	    dec	    hex	filename
+  15180	     32	   1864	  17076	   42b4	laser_locking stm.elf
+Finished building: default.size.stdout
+ 
+
+15:38:01 Build Finished. 0 errors, 0 warnings. (took 548ms)
+

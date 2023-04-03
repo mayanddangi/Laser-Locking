@@ -1,0 +1,20 @@
+11:28:00 **** Incremental Build of configuration Debug for project laser_locking_cpp ****
+make -j12 all 
+arm-none-eabi-g++ "../Core/Src/cpp_main.cpp" -mcpu=cortex-m7 -std=gnu++14 -g3 -DUSE_HAL_DRIVER -DSTM32F746xx -DDEBUG -c -I../Core/Inc -I../Drivers/STM32F7xx_HAL_Driver/Inc -I../Drivers/STM32F7xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F7xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-use-cxa-atexit -Wall -fstack-usage -MMD -MP -MF"Core/Src/cpp_main.d" -MT"Core/Src/cpp_main.o" --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -o "Core/Src/cpp_main.o"
+arm-none-eabi-g++ -o "laser_locking_cpp.elf" @"objects.list"   -mcpu=cortex-m7 -T"E:\MAYAND\IITD\Prof. Project\Laser\Laser Locking\laser_locking_cpp\STM32F746ZGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="laser_locking_cpp.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv5-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -lstdc++ -lsupc++ -Wl,--end-group
+Finished building target: laser_locking_cpp.elf
+ 
+arm-none-eabi-objdump -h -S  laser_locking_cpp.elf  > "laser_locking_cpp.list"
+arm-none-eabi-objcopy  -O binary  laser_locking_cpp.elf  "laser_locking_cpp.bin"
+arm-none-eabi-size   laser_locking_cpp.elf 
+   text	   data	    bss	    dec	    hex	filename
+  27208	    392	   1936	  29536	   7360	laser_locking_cpp.elf
+Finished building: default.size.stdout
+ 
+Finished building: laser_locking_cpp.bin
+ 
+Finished building: laser_locking_cpp.list
+ 
+
+11:28:02 Build Finished. 0 errors, 0 warnings. (took 1s.492ms)
+

@@ -1,0 +1,480 @@
+/*
+ * cpp_main.cpp
+ *
+ *  Created on: Mar 2, 2023
+ *      Author: Mayand
+ */
+
+#include "cpp_main.h"
+
+#include "adc.h"
+#include "dma.h"
+#include "gpio.h"
+#include "spi.h"
+
+//#include <vector>
+#include <stdint.h>
+#include <string>
+#include <deque>
+using namespace std;
+
+float RampOut(long ramp_time);
+uint16_t RampOut1(long ramp_time);
+long getCurrentMicros(void);
+static uint32_t LL_SYSTICK_IsActiveCounterFlag(void);
+uint16_t getSetPoint();
+void analogWrite(uint16_t val);
+float toVoltage(uint16_t value);
+
+int t = 0;
+uint8_t hello = 0;
+//vector<int> v1;
+uint16_t PD[2];
+uint16_t pd1, pd2;
+//float freq = 1;
+//float ramp_amp = 3.3;
+//long ramp_time = 0;
+//long current_time = 0;
+//float period = 1000000/1;
+//long period = 1000000;
+uint32_t out = 0;
+float temp;
+bool comp;
+
+//===========================================================================//
+
+typedef struct {
+  string param_name;
+  float param_value;
+} Parameter ;
+
+/* Measured quantities */
+Parameter measured_sig_amp = {"Desired lock-point amplitude [mV]",500};	//the amplitude of the discriminator slope
+Parameter loop_speed = {"Running loop speed (locking mode) [kHz]",12.8};
+
+/* Input Initial PID Control ParameteParameterrs */
+Parameter pterm_piezo = {"P (piezo)",0.01};								// proportional gain term on piezo
+// Parameter pterm_current = {"P (current)",2};							// proportional gain term on current
+Parameter itime = {"Integration time constant [us]",500};				// integration time constant in microseconds
+Parameter stime = {"Second integration time constant [us]",1000};		// second integration time (i squared) in microseconds
+Parameter dtime = {"Derivative time constant [us]",2};					// derivative time constant in microseconds
+// Parameter fterm = {"Feedforward to current",0.1};						//feedforward scaling term
+Parameter alpha = {"Low-pass filter constant alpha",0.9};				//proportional gain low-pass filter constant
+
+/* Adjust Initial Ramp Parameters */
+Parameter freq = {"Scan frequency [Hz]",10};							//in Hz
+Parameter ramp_amp = {"Scan amplitude [V]", 3};							// in V
+/* Private variables ---------------------------------------------------------*/
+//byte byte_read;
+bool lock_state = 0;  													// 0 is scanning, 1 is locked
+int trigger_auto_relock = 0;
+
+
+// float zerov = 32768.0; //Zero volts
+float threshold = 0.01;
+
+//set point param
+float set_point;
+float set_point_time;
+float set_point_offset;
+
+float lock_point;
+float lock_point_time;
+float lock_point_offset;
+// PID params
+float PIID_out = 0;
+float P_out = 0;
+float error;
+float error_previous = 0;
+float d_error;
+float d_error_previous = 0;
+float accumulator = 0;
+float accumulator_squared;
+
+// ramp
+float period = 1000000.0/freq.param_value;
+long ramp_reset_time = 0;
+long current_time = 0;
+long ramp_time = 0;
+
+// signal filter
+int sf_size = 10;
+// Queue signal_filter(sf_size);
+
+// derivative_filter
+int df_size = 10;
+// Queue deri_filter(df_size);
+
+//====================================================================================//
+
+int alt_main(){
+
+	HAL_ADC_Start_DMA(&hadc1, (uint32_t *)PD, 2);
+
+//	period /= freq;
+
+	while (1)
+	{
+		//---------------- Scanning Mode -------------------
+		if(lock_state == 0){
+			// generate ramp
+		}
+		//---------------- Locking Mode --------------------
+		if(lock_state == 1){
+
+			// initialization
+
+			// PID parameters
+			accumulator = 0;
+			accumulator_squared = 0;
+			error_previous = 0;
+			d_error_previous = 0;
+
+			// obtain set point
+
+			// start PID
+
+			// auto re-locking
+
+		}
+	}
+	  return 0;
+}
+
+uint16_t getSetPoint(){
+	// ----------------- Filter Initialization -----------------
+	// signal filter
+	deque<float> signal_filter(sf_size, 0);
+
+	// derivative filter
+	deque<float> deri_filter(df_size, 0);
+
+	// --------------------- Peak Finding ----------------------
+	float max_val = -5;
+	float min_val = 5;
+	uint16_t max_val_time = 0;
+	uint16_t min_val_time = 0;
+
+	deque<uint16_t> minima_time;
+	deque<uint16_t> maxima_time;
+
+	float err_sig = 0;
+	float err_sig_prev = 0;
+	float err_sig_avg = 0;
+	float err_sig_avg_prev = 0;
+
+	float deri_avg = 0;
+	float deri_avg_prev = 0;
+
+	bool find_max = false;
+	bool find_min = true;
+	bool lockpoint_found = false;
+
+	float ramp_time = 0;
+	float ramp_end_time = 8190;
+
+	while(ramp_time < ramp_end_time){
+		err_sig_prev = err_sig;
+		//-------------- Generate Ramp ---------------
+		analogWrite(RampOut1(ramp_time++));
+
+		//-------------- Read Signal -----------------
+		pd1 = toVoltage(PD[0]);
+		pd2 = toVoltage(PD[1]);
+		err_sig = pd1-pd2;
+
+		//-------------- update signal ---------------
+		float temp_sig = signal_filter[0];
+		signal_filter.pop_front();
+		signal_filter.push_back(err_sig);
+
+		err_sig_avg_prev = err_sig_avg;
+		err_sig_avg = (err_sig_avg_prev*sf_size - temp_sig + err_sig)/sf_size;
+
+		//----------- update derivative --------------
+		temp_sig = deri_filter[0];
+		deri_filter.pop_front();
+		deri_filter.push_back(err_sig - err_sig_prev);
+
+		deri_avg_prev = deri_avg;
+		deri_avg = (deri_avg_prev*df_size - temp_sig + (err_sig - err_sig_prev))/df_size;
+
+		if(ramp_time > 1023 && ramp_time < 2730){
+			//find maximum if find_max = true
+			if(err_sig_avg > max_val && find_max){
+				max_val = err_sig_avg;
+				max_val_time = ramp_time;
+			}
+			//find minimum if find_min = true
+			if(err_sig_avg < min_val && find_min){
+				min_val = err_sig_avg;
+				min_val_time = ramp_time;
+			}
+
+			if(deri_avg_prev * deri_avg < 0){
+				// find local minima
+				if(min_val < err_sig_avg){
+					minima_time.push_back(min_val_time);
+					min_val = 5;
+					find_min = false;
+					find_max = true;
+				}
+				// find local maxima
+				if(max_val >err_sig_avg){
+					maxima_time.push_back(max_val_time);
+					max_val = -5;
+					find_max = false;
+					find_min = true;
+				}
+			}
+		}
+	}
+
+	//finding lockpoint
+	int len = maxima_time.size();
+	float sig_amp = 0;
+
+	for (uint8_t i=0; i<len; i++){
+	    if(i == maxima_time.size()-1) break;
+	    sig_amp = maxima_time[i] - minima_time[i];
+//	    sig_amp = *(max_ptr+(i+max_front)%len) - *(min_ptr+(i+min_front)%len);
+	    if(abs(threshold-sig_amp)<0.25*sig_amp){
+	      lockpoint_found = true;
+	      set_point_time = (maxima_time[i] + minima_time[i])/2;
+	    }
+	  }
+	if(lockpoint_found){
+	    set_point = sig_amp;
+	    set_point_time = (max_front + min_front)/2;
+//	    Serial.print("Lock-point signal amplitude: ");
+//	    Serial.print(sig_amp);
+//	    Serial.print(" mV; Lock-point time (from start of scan): ");
+//	    Serial.print((max_front+min_front)/2/1000.);
+//	    Serial.println(" ms");
+	  }
+
+	  if(lockpoint_found==false) {
+	      accumulator = 100; //triggers relocking
+//	      Serial.println("Lock-point not found");
+	    }
+
+	  return set_point_time;
+}
+
+uint16_t RampOut1(long ramp_time) {
+	uint16_t ramp;
+	uint16_t amp = 4095;
+	uint16_t half_period = 4095;
+	if(ramp_time <= half_period)
+		ramp = (amp/(half_period))*ramp_time;
+    else
+    	ramp = 2*amp-(amp/(half_period))*ramp_time;
+    return ramp;
+}
+
+void analogWrite(uint16_t val){
+	HAL_GPIO_WritePin (GPIOA, GPIO_PIN_3, GPIO_PIN_RESET);
+	HAL_SPI_Transmit (&hspi1, (uint8_t *)&val, sizeof(val)/sizeof(uint16_t), 1);
+	HAL_GPIO_WritePin (GPIOA, GPIO_PIN_3, GPIO_PIN_SET);
+}
+
+float toVoltage(uint16_t value){
+	return float(value)*3300.0/4095.0;
+}
+
+long getCurrentMicros(void){
+  /* Ensure COUNTFLAG is reset by reading SysTick control and status register */
+  LL_SYSTICK_IsActiveCounterFlag();
+  long m = HAL_GetTick();
+  const long tms = SysTick->LOAD + 1;
+  __IO long u = tms - SysTick->VAL;
+  if (LL_SYSTICK_IsActiveCounterFlag()) {
+    m = HAL_GetTick();
+    u = tms - SysTick->VAL;
+  }
+  return (m * 1000 + (u * 1000) / tms);
+}
+
+static inline uint32_t LL_SYSTICK_IsActiveCounterFlag(void)
+{
+  return ((SysTick->CTRL & SysTick_CTRL_COUNTFLAG_Msk) == (SysTick_CTRL_COUNTFLAG_Msk));
+}
+
+/*
+float getSetPoint(){
+  // signal filter
+  int sf_size = 10;
+  Queue signal_filter(sf_size);
+  for(int i=0; i<sf_size; i++)  signal_filter.enQueue(0);
+
+  // derivative_filter
+  int df_size = 10;
+  Queue deri_filter(df_size);
+  for(int i=0; i<df_size; i++)  deri_filter.enQueue(0);
+
+  float max_val = -5;
+  float min_val = 5;
+  float max_val_time = 0;
+  float min_val_time = 0;
+
+  Queue minima_time(10);
+  Queue maxima_time(10);
+
+  float err_sig = 0;
+  float err_sig_prev = 0;
+  float err_sig_avg = 0;
+  float err_sig_avg_prev = 0;
+
+  float deri_avg = 0;
+  float deri_avg_prev = 0;
+
+  bool find_max = false;
+  bool find_min = true;
+  bool lockpoint_found = false;
+
+  float ramp_start_time = micros();
+
+  while(ramp_time <= period){
+    current_time = micros();
+    err_sig_prev = err_sig;
+    //----------------Generate Ramp----------------
+    ramp_time = current_time - ramp_start_time;
+	// analogWrite(3, RampOut(ramp_time));
+    analog.write(0, ToBits(RampOut(ramp_time)));
+
+
+
+    //-----------------Read Signal-----------------
+   err_sig = ToVoltage(analog.read(0) - analog.read(1));
+    // err_sig = 0;
+	// err_sig = (analogRead(0) - analogRead(1))/1024*5;
+
+    signal_filter.deQueue();
+    signal_filter.enQueue(err_sig);
+
+    err_sig_avg_prev = err_sig_avg;
+    err_sig_avg = signal_filter.avg_arr();
+
+    //---------------Update Signal-----------------
+    deri_filter.deQueue();
+    deri_filter.enQueue(err_sig - err_sig_prev);
+
+    deri_avg_prev = deri_avg;
+    deri_avg = deri_filter.avg_arr();
+
+    if(ramp_time > period/8 && ramp_time < period/3){
+      //find maximum if find_max = true
+      if(err_sig_avg > max_val && find_max){
+        max_val = err_sig_avg;
+        max_val_time = ramp_time;
+      }
+      //find minimum if find_min = true
+      if(err_sig_avg < min_val && find_min){
+        min_val = err_sig_avg;
+        min_val_time = ramp_time;
+      }
+
+      if(deri_avg_prev * deri_avg < 0){
+        // find local minima
+        if(min_val < err_sig_avg){
+          minima_time.enQueue(min_val_time);
+          min_val = 5;
+          find_min = false;
+          find_max = true;
+        }
+        // find local maxima
+        if(max_val >err_sig_avg){
+          maxima_time.enQueue(max_val_time);
+          max_val = -5;
+          find_max = false;
+          find_min = true;
+        }
+      }
+    }
+
+  }
+  // finding lockpoint
+  int len = maxima_time.get_length();
+  float sig_amp = 0;
+
+  float *max_ptr;
+  max_ptr = maxima_time.getQueue();
+  int max_front = maxima_time.get_first_index();
+
+  float *min_ptr;
+  int min_front = minima_time.get_first_index();
+  min_ptr = minima_time.getQueue();
+
+  threshold = measured_sig_amp.param_value;
+  for (int i=0; i<len; i++){
+    if(i == maxima_time.get_size()-1) break;
+    sig_amp = *(max_ptr+(i+max_front)%len) - *(min_ptr+(i+min_front)%len);
+    if(abs(threshold-sig_amp)<0.25*sig_amp){
+      lockpoint_found = true;
+      set_point_time = (max_front + min_front)/2;
+    }
+  }
+
+
+
+  if(lockpoint_found){
+    set_point = sig_amp;
+    set_point_time = (max_front + min_front)/2;
+    Serial.print("Lock-point signal amplitude: ");
+    Serial.print(sig_amp);
+    Serial.print(" mV; Lock-point time (from start of scan): ");
+    Serial.print((max_front+min_front)/2/1000.);
+    Serial.println(" ms");
+  }
+
+  if(lockpoint_found==false) {
+      accumulator = 100; //triggers relocking
+      Serial.println("Lock-point not found");
+    }
+
+  return set_point_time;
+
+}
+
+*/
+
+
+//float ramp_start_time = getCurrentMicros();
+//		ramp_time = 0;
+//		while(ramp_time <= period){
+//		current_time = getCurrentMicros();
+//		//----------------Generate Ramp----------------
+//		comp = current_time - ramp_start_time < 0;
+//		ramp_time = current_time - ramp_start_time;
+//		temp = RampOut(ramp_time)/3.3*4095;
+//		out = (uint32_t)temp;
+//		HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (uint32_t)temp);
+//		pd1 = PD[0];
+//		pd2 = PD[1];
+////		int i=10;
+////		while(i--);
+//		HAL_Delay(1);
+//}
+
+
+//float RampOut(long ramp_time) {
+//  float ramp;
+//  float amp = ramp_amp;
+//  float offset = 0;
+//  if(ramp_time<=(period/2))
+//      ramp = (amp/(period/2))*ramp_time + offset;
+//    else
+//      ramp = 2*amp -(amp/(period/2))*ramp_time + offset;
+//  if(ramp < 0) ramp = 0;
+//    return ramp;
+//}
+//
+//uint16_t RampOut1(long ramp_time) {
+//	uint16_t ramp;
+//	uint16_t amp = 4095;
+//	if(ramp_time<=(period))
+//		ramp = (amp/(period))*ramp_time;
+//    else
+//    	ramp = -(amp/(period))*ramp_time;
+//    return ramp;
+//}

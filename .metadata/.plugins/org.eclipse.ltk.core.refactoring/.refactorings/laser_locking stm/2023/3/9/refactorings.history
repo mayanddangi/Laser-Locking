@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;laser_locking stm/Core/Src/atl_main.cpp&apos; to &apos;alt_main.cpp&apos;" description="Rename resource &apos;atl_main.cpp&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="Core/Src/atl_main.cpp" name="alt_main.cpp" stamp="1677753138666" updateReferences="true"/>
+</session>
