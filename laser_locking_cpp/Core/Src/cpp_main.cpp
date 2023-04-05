@@ -66,7 +66,7 @@ Parameter freq = {"Scan frequency [Hz]",10};							//in Hz
 Parameter ramp_amp = {"Scan amplitude [V]", 3};							// in V
 /* Private variables ---------------------------------------------------------*/
 //byte byte_read;
-bool lock_state = 0;  													// 0 is scanning, 1 is locked
+uint8_t lock_state = 0;  													// 0 is scanning, 1 is locked
 int trigger_auto_relock = 0;
 
 
@@ -109,7 +109,7 @@ int df_size = 10;
 
 int alt_main(){
 
-	HAL_ADC_Start_DMA(&hadc1, (uint32_t *)PD, 2);
+//	HAL_ADC_Start_DMA(&hadc1, (uint32_t *)PD, 2);
 
 //	period /= freq;
 
@@ -118,6 +118,14 @@ int alt_main(){
 		//---------------- Scanning Mode -------------------
 		if(lock_state == 0){
 			// generate ramp
+			uint16_t ramp_time = 0;
+			uint16_t ramp_end_time = 8190;
+
+			while(ramp_time < ramp_end_time){
+				//-------------- Generate Ramp ---------------
+				analogWrite(RampOut1(ramp_time++));
+			}
+
 		}
 		//---------------- Locking Mode --------------------
 		if(lock_state == 1){
